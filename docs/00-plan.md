@@ -172,8 +172,26 @@ unreal-myth-bench/
 
 ### 6.1 프로젝트 생성
 
-- C++ · Blank 템플릿 · Starter Content 없음 · Desktop · 프로젝트명 `MythBench`
+생성 다이얼로그에서 다음대로 고른다.
+
+| 항목 | 값 |
+|---|---|
+| 카테고리 · 템플릿 | Games → Blank |
+| 구현 | C++ |
+| Target Platform | Desktop |
+| Quality Preset | Maximum |
+| Starter Content | 끄기 |
+| Raytracing | 끄기 |
+| 이름 · 위치 | `MythBench` · 클론한 레포 루트 |
+
+Third Person 같은 예제 템플릿을 쓰지 않는다. 캐릭터와 CharacterMovementComponent,
+애님 블루프린트, 입력 매핑이 딸려와 매 프레임 게임 스레드에서 돈다. 우리가 재려는 것이
+바로 그 게임 스레드다. 에셋 수백 MB가 붙어 레포가 무거워지는 것도 문제다.
+
+Quality Preset을 Scalable이 아니라 Maximum으로 두는 이유는 6.3에 적었다.
+
 - 생성 후 `Content/StarterContent` 같은 게 딸려왔다면 지운다
+- 경로가 `unreal-myth-bench/MythBench/MythBench.uproject`인지 확인한다
 - 확인 — 에디터가 뜨고 빈 레벨이 열린다
 
 ### 6.2 리포지토리 초기화
@@ -191,7 +209,12 @@ unreal-myth-bench/
 - 스크린 퍼센티지 100 고정
 - 자동 노출, 모션 블러 등 프레임마다 상태가 변하는 후처리 비활성
 - GC 주기를 길게 잡아 측정 구간에 걸리지 않게 하고, 대신 측정 전후로 강제 GC를 한 번씩
+- **스케일러빌리티 자동 감지를 끄고 값을 고정한다.** 언리얼은 첫 실행 때 하드웨어 벤치마크를
+  돌려 결과를 `Saved/Config/.../GameUserSettings.ini`에 쓴다. `Saved/`는 gitignore에
+  걸려 있어 머신마다 제각각 생성되므로, 같은 명령어를 돌려도 PC마다 렌더 설정이 달라진다.
+  러너가 측정 시작 전에 스케일러빌리티를 코드로 강제 적용하고 그 값을 `env.json`에 남긴다
 - 확인 — 빈 맵에서 `stat unit`의 프레임 시간이 흔들리지 않는다
+- 확인 — 두 머신에서 같은 시나리오를 돌렸을 때 적용된 스케일러빌리티 값이 같다
 
 ### 6.4 벤치 맵
 

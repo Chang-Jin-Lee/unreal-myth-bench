@@ -26,6 +26,7 @@
   "engine_version": "5.8.1-XXXXXXX",
   "build_config": "Development",
   "rhi": "D3D12",
+  "scalability": { "view_distance": 3, "shadow": 3, "texture": 3, "effects": 3 },
   "captured_utc": "2026-08-25T04:12:33Z"
 }
 ```
@@ -75,7 +76,20 @@ r.DefaultFeature.AutoExposure 0   프레임마다 변하는 후처리 제거
 r.DefaultFeature.MotionBlur 0
 r.Streaming.PoolSize 0      텍스처 스트리밍 변동 제거 (합성 층 한정)
 gc.CollectGarbageEveryFrame 0
+sg.ViewDistanceQuality 3     스케일러빌리티 고정. 자동 감지 결과를 덮어쓴다
+sg.AntiAliasingQuality 3
+sg.PostProcessQuality 3
+sg.ShadowQuality 3
+sg.TextureQuality 3
+sg.EffectsQuality 3
+sg.FoliageQuality 3
+sg.ShadingQuality 3
 ```
+
+스케일러빌리티를 명시적으로 박는 이유가 있다. 언리얼은 첫 실행 때 하드웨어 벤치마크를 돌려
+결과를 `Saved/Config/.../GameUserSettings.ini`에 쓰는데, `Saved/`는 저장소에 올라가지
+않으므로 머신마다 다른 값이 생긴다. 그대로 두면 같은 명령어가 PC마다 다른 렌더 설정으로
+돈다. 적용된 값은 `env.json`에 함께 기록한다.
 
 GPU 항목이 아닐 때는 렌더링 부하 자체를 낮춰 신호를 살린다.
 GPU를 재는 항목에서는 위의 렌더링 관련 항목을 끄면 안 된다.
