@@ -283,7 +283,8 @@ void ABenchRunner::WriteResults(const FBenchQuality& Quality)
 			FrameSamplesMs[Index], ScenarioSamplesMs[Index], GameThreadSamplesMs[Index],
 			RenderThreadSamplesMs[Index], GpuSamplesMs[Index]);
 	}
-	FFileHelper::SaveStringToFile(Raw, *FPaths::Combine(OutDir, TEXT("frames.csv")));
+	FFileHelper::SaveStringToFile(Raw, *FPaths::Combine(OutDir, TEXT("frames.csv")),
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 
 	const FBenchStats Frame    = FBenchStats::FromSamples(FrameSamplesMs);
 	const FBenchStats ScenarioS= FBenchStats::FromSamples(ScenarioSamplesMs);
@@ -334,6 +335,8 @@ void ABenchRunner::WriteResults(const FBenchQuality& Quality)
 		Gpu.Median, Gpu.P95, Gpu.Min, Gpu.Max,
 		*Environment.ToJson());
 
-	FFileHelper::SaveStringToFile(Summary, *FPaths::Combine(OutDir, TEXT("summary.json")));
-	FFileHelper::SaveStringToFile(Environment.ToJson(), *FPaths::Combine(OutDir, TEXT("env.json")));
+	FFileHelper::SaveStringToFile(Summary, *FPaths::Combine(OutDir, TEXT("summary.json")),
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	FFileHelper::SaveStringToFile(Environment.ToJson(), *FPaths::Combine(OutDir, TEXT("env.json")),
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }

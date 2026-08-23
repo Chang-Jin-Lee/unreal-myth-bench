@@ -48,8 +48,11 @@ def wrap_affinity(cmd: list[str], mask: str) -> list[str]:
     """
     if not mask:
         return cmd
-    quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)
-    return ["cmd", "/c", "start", "/affinity", mask, "/wait", "/b", "", quoted]
+    # cmd 를 하나의 문자열로 합쳐 넘기면 subprocess 가 그것을 다시 통째로 인용하고,
+    # start 는 명령 전체를 프로그램 경로로 해석해 "지정된 프로그램을 실행할 수 없습니다"
+    # 로 죽는다. 토큰을 그대로 펼쳐야 한다.
+    # 앞의 "" 는 start 의 창 제목이다. 이게 없으면 공백 있는 exe 경로가 제목으로 먹힌다.
+    return ["cmd", "/c", "start", "/affinity", mask, "/wait", "/b", "", *cmd]
 
 
 def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[str]:
