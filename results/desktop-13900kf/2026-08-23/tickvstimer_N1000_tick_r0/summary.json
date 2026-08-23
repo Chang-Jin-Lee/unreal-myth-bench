@@ -1,0 +1,33 @@
+{
+  "scenario": "tickvstimer",
+  "param_n": 1000,
+  "param_extra": "mode=tick;tickgroup=prephysics",
+  "repeat_index": 0,
+  "warmup_seconds": 3.001,
+  "measured_seconds": 10.001,
+  "measured_frames": 5931,
+  "average_fps": 593.0,
+  "hitch_count": 43,
+  "hitch_ratio": 0.00725,
+  "render_bound": true,
+  "warnings": ["렌더 스레드(1.624ms)가 게임 스레드(1.216ms)보다 크다. CPU 항목이면 -nullrhi 로 돌린다"],
+  "frame_ms":       { "median": 1.6571, "p95": 2.2116, "min": 0.9307, "max": 26.8768 },
+  "scenario_ms":    { "median": 0.0006, "p95": 0.0009, "min": 0.0002, "max": 0.0326 },
+  "game_ms":        { "median": 1.2158, "p95": 1.6981, "min": 0.8628, "max": 21.3549 },
+  "render_ms":      { "median": 1.6237, "p95": 2.3046, "min": 0.7577, "max": 3.2839 },
+  "gpu_ms":         { "median": 0.3492, "p95": 0.3774, "min": 0.3216, "max": 0.9589 },
+  "environment": {
+  "machine_id": "desktop-13900kf",
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900KF",
+  "gpu": "NVIDIA GeForce RTX 4060 Ti",
+  "ram_gb": 128,
+  "core_count": 32,
+  "affinity": "FFFF",
+  "os": "10.0.26200.1.256.64bit",
+  "engine_version": "5.8.1-56057345+++UE5+Release-5.8",
+  "build_config": "Development",
+  "rhi": "D3D12 (SM6)",
+  "substrate": false,
+  "scalability": { "view_distance": 3, "anti_aliasing": 3, "shadow": 3, "post_process": 3, "texture": 3, "effects": 3, "foliage": 3, "shading": 3 }
+}
+}

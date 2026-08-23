@@ -1,0 +1,33 @@
+{
+  "scenario": "tickvstimer",
+  "param_n": 10000,
+  "param_extra": "mode=tick;tickgroup=prephysics",
+  "repeat_index": 0,
+  "warmup_seconds": 3.003,
+  "measured_seconds": 10.002,
+  "measured_frames": 2285,
+  "average_fps": 228.5,
+  "hitch_count": 2,
+  "hitch_ratio": 0.00088,
+  "render_bound": false,
+  "warnings": [],
+  "frame_ms":       { "median": 4.3510, "p95": 4.8112, "min": 3.5662, "max": 22.6617 },
+  "scenario_ms":    { "median": 0.0008, "p95": 0.0011, "min": 0.0004, "max": 0.0028 },
+  "game_ms":        { "median": 4.3420, "p95": 4.7911, "min": 3.5469, "max": 17.8839 },
+  "render_ms":      { "median": 1.1809, "p95": 1.7349, "min": 0.8925, "max": 2.1672 },
+  "gpu_ms":         { "median": 0.4986, "p95": 1.0782, "min": 0.4478, "max": 3.8111 },
+  "environment": {
+  "machine_id": "desktop-13900kf",
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900KF",
+  "gpu": "NVIDIA GeForce RTX 4060 Ti",
+  "ram_gb": 128,
+  "core_count": 32,
+  "affinity": "FFFF",
+  "os": "10.0.26200.1.256.64bit",
+  "engine_version": "5.8.1-56057345+++UE5+Release-5.8",
+  "build_config": "Development",
+  "rhi": "D3D12 (SM6)",
+  "substrate": false,
+  "scalability": { "view_distance": 3, "anti_aliasing": 3, "shadow": 3, "post_process": 3, "texture": 3, "effects": 3, "foliage": 3, "shading": 3 }
+}
+}
