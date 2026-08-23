@@ -13,8 +13,9 @@ from pathlib import Path
 
 COLUMNS = [
     "machine_id", "cpu", "gpu", "ram_gb", "os", "engine_version", "build_config",
-    "rhi", "substrate", "scenario", "param_n", "param_extra", "repeat_index",
-    "warmup_frames", "measured_frames",
+    "rhi", "affinity", "core_count", "substrate", "scenario", "param_n", "param_extra",
+    "repeat_index", "warmup_seconds", "measured_seconds", "measured_frames",
+    "average_fps", "hitch_ratio", "render_bound", "warnings",
     "frame_ms_median", "frame_ms_p95", "frame_ms_min", "frame_ms_max",
     "scenario_ms_median", "scenario_ms_p95",
     "game_ms_median", "game_ms_p95",
@@ -38,13 +39,20 @@ def flatten(summary: dict) -> dict:
         "engine_version": env.get("engine_version", ""),
         "build_config": env.get("build_config", ""),
         "rhi": env.get("rhi", ""),
+        "affinity": env.get("affinity", ""),
+        "core_count": env.get("core_count", ""),
         "substrate": env.get("substrate", ""),
         "scenario": summary.get("scenario", ""),
         "param_n": summary.get("param_n", ""),
         "param_extra": summary.get("param_extra", ""),
         "repeat_index": summary.get("repeat_index", ""),
-        "warmup_frames": summary.get("warmup_frames", ""),
+        "warmup_seconds": summary.get("warmup_seconds", ""),
+        "measured_seconds": summary.get("measured_seconds", ""),
         "measured_frames": summary.get("measured_frames", ""),
+        "average_fps": summary.get("average_fps", ""),
+        "hitch_ratio": summary.get("hitch_ratio", ""),
+        "render_bound": summary.get("render_bound", ""),
+        "warnings": " | ".join(summary.get("warnings", [])),
         "frame_ms_median": stat("frame_ms", "median"),
         "frame_ms_p95": stat("frame_ms", "p95"),
         "frame_ms_min": stat("frame_ms", "min"),
@@ -104,6 +112,18 @@ def main() -> int:
 
     print(f"{len(rows)}행 → {out}")
     print(f"머신 {machines.pop()} · 엔진 {engines.pop()} · 구성 {configs.pop()}")
+
+    # 러너가 붙인 경고를 여기서 한 번 더 올린다. 조용히 넘어가면 안 되는 것들이다.
+    flagged = [r for r in rows if r.get("warnings")]
+    if flagged:
+        print(f"\n러너가 경고를 남긴 실행 {len(flagged)}/{len(rows)}건:", file=sys.stderr)
+        seen = {}
+        for row in flagged:
+            for w in row["warnings"].split(" | "):
+                key = w.split(".")[0][:60]
+                seen[key] = seen.get(key, 0) + 1
+        for key, count in sorted(seen.items(), key=lambda kv: -kv[1]):
+            print(f"  {count:3d}회  {key}", file=sys.stderr)
     return 0
 
 

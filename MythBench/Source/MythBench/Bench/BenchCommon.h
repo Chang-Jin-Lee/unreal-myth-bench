@@ -13,10 +13,16 @@ struct MYTHBENCH_API FBenchRunSpec
 	int32   N             = 0;
 	FString Mode;                 // 시나리오별 추가 축
 	FString TickGroup     = TEXT("prephysics");
-	int32   WarmupFrames  = 120;
-	int32   MeasureFrames = 600;
+
+	// 프레임 수가 아니라 시간으로 자른다. 프레임 시간 자체가 측정 대상이라
+	// 프레임 수로 자르면 조건마다 측정 창 길이가 달라진다.
+	double  WarmupSeconds  = 3.0;
+	double  MeasureSeconds = 10.0;
+	int32   MaxFrames      = 200000;   // 메모리 상한. 정상 실행에서는 걸리지 않는다
+
 	int32   RepeatIndex   = 0;
 	FString MachineId;
+	FString AffinityNote;         // 런처가 적용한 코어 고정. 기록용
 	FString OutDir;
 
 	static FBenchRunSpec FromCommandLine();
@@ -38,12 +44,16 @@ struct MYTHBENCH_API FBenchEnvironment
 	FString EngineVersion;
 	FString BuildConfig;
 	FString Rhi;
+	FString Affinity;
 	int32   RamGb = 0;
+	int32   CoreCount = 0;
 	bool    bSubstrate = false;
 	TMap<FString, int32> Scalability;
 
-	static FBenchEnvironment Collect(const FString& InMachineId);
+	static FBenchEnvironment Collect(const FBenchRunSpec& Spec);
 	FString ToJson() const;
+	/** run.log 첫머리에 한 줄로 남긴다. 로그만 봐도 어디서 잰 건지 알 수 있게. */
+	FString OneLine() const;
 };
 
 /**
@@ -60,6 +70,18 @@ struct MYTHBENCH_API FBenchStats
 
 	/** Samples 를 정렬하므로 참조로 받는다. */
 	static FBenchStats FromSamples(TArray<double>& Samples);
+};
+
+/** 측정 품질. 러너가 스스로 판정해 로그와 summary 에 남긴다. */
+struct MYTHBENCH_API FBenchQuality
+{
+	int32  HitchCount = 0;       // 중앙값 1.5배 초과 프레임
+	double HitchRatio = 0.0;
+	double MeasuredSeconds = 0.0;
+	double AverageFps = 0.0;
+	bool   bRenderBound = false; // render_ms 중앙값이 game_ms 중앙값보다 크다
+
+	TArray<FString> Warnings;    // 사람이 읽을 경고. 비어 있으면 깨끗한 실행이다
 };
 
 namespace BenchJson

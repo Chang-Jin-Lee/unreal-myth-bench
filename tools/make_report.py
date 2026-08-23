@@ -4,8 +4,9 @@
 외부 라이브러리를 쓰지 않는다. 클론한 사람이 pip 없이 바로 돌릴 수 있어야
 재현 가능성이라는 이 프로젝트의 전제가 유지된다.
 
-반복은 프로세스 재시작 단위이므로, 같은 (N, 조건) 의 반복들을 여기서 합친다.
-합치는 값은 중앙값이다. 평균은 쓰지 않는다.
+핵심은 절대값이 아니라 **대조군을 뺀 순증분**이다. 빈 맵에서도 게임 스레드
+베이스라인이 0.8ms 쯤 나오는데, N=10 액터의 비용은 0.004ms 수준이다. 절대값을
+그대로 실으면 베이스라인의 잡음을 측정값이라고 발표하게 된다.
 """
 
 import argparse
@@ -15,8 +16,11 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-# 반복 간 중앙값이 이보다 벌어지면 그 조합은 신뢰하지 않는다.
-SPREAD_WARN = 0.05
+# 순증분 대비 반복 편차가 이보다 크면 그 조합은 신뢰하지 않는다.
+# 절대 편차로 재면 신호가 작을수록 무조건 걸려서 기준이 거꾸로 작동한다.
+SPREAD_WARN = 0.10
+# 순증분이 이보다 작으면 베이스라인 잡음에 묻힌 것으로 본다 (ms).
+SIGNAL_FLOOR = 0.02
 
 
 def load(path: Path) -> list[dict]:
@@ -24,7 +28,7 @@ def load(path: Path) -> list[dict]:
         return list(csv.DictReader(fp))
 
 
-def group(rows: list[dict], metric: str):
+def collect(rows: list[dict], metric: str):
     """(조건, N) -> 반복별 값 목록"""
     buckets = defaultdict(list)
     for row in rows:
@@ -35,107 +39,185 @@ def group(rows: list[dict], metric: str):
     return buckets
 
 
-def summarize(buckets):
-    """(조건, N) -> (중앙값, 편차비율, 반복수)"""
+def pick_baseline(conditions, explicit: str) -> str | None:
+    if explicit:
+        return explicit
+    for cond in conditions:
+        if "disabled" in cond or "none" in cond:
+            return cond
+    return None
+
+
+def analyse(buckets, baseline: str | None):
+    """(조건, N) -> dict(raw, spread, net, count)"""
+    base = {}
+    if baseline:
+        for (cond, n), values in buckets.items():
+            if cond == baseline:
+                base[n] = statistics.median(values)
+
     out = {}
-    for key, values in buckets.items():
-        median = statistics.median(values)
-        spread = 0.0
-        if median > 0 and len(values) > 1:
-            spread = (max(values) - min(values)) / median
-        out[key] = (median, spread, len(values))
+    for (cond, n), values in buckets.items():
+        raw = statistics.median(values)
+        spread = (max(values) - min(values)) if len(values) > 1 else 0.0
+        net = raw - base.get(n, 0.0) if baseline else raw
+        out[(cond, n)] = {
+            "raw": raw, "spread": spread, "net": net, "count": len(values),
+            "is_baseline": cond == baseline,
+        }
     return out
 
 
-def markdown_table(summary, metric: str) -> str:
-    conditions = sorted({k[0] for k in summary})
-    ns = sorted({k[1] for k in summary})
+def slope_per_1k(points: list[tuple[int, float]]):
+    """원점을 지나는 최소제곱 기울기. 상수 베이스라인은 이미 빠졌다고 본다.
 
-    lines = [f"| 조건 | " + " | ".join(f"N={n:,}" for n in ns) + " |",
-             "|---|" + "---|" * len(ns)]
+    믿을 수 있는 점이 하나뿐이면 기울기가 아니라 그 점 하나의 추정치다.
+    구분해서 돌려준다.
+    """
+    usable = [(n, v) for n, v in points if n > 0]
+    if not usable:
+        return None, False
+    if len(usable) == 1:
+        n, v = usable[0]
+        return v / n * 1000.0, False
+    num = sum(n * v for n, v in usable)
+    den = sum(n * n for n, _ in usable)
+    if den == 0:
+        return None, False
+    return num / den * 1000.0, True
+
+
+def verdict(entry) -> str:
+    if entry["is_baseline"]:
+        return "대조군"
+    if entry["net"] < SIGNAL_FLOOR:
+        return "신호 없음"
+    if entry["spread"] / entry["net"] > SPREAD_WARN:
+        return "편차 큼"
+    return "OK"
+
+
+def markdown(rows, analysis, metric, baseline):
+    conditions = sorted({k[0] for k in analysis})
+    ns = sorted({k[1] for k in analysis})
+    first = rows[0]
+    def field(key, suffix=""):
+        value = first.get(key, "")
+        return f"{value}{suffix}" if value not in (None, "") else "기록 없음"
+
+    lines = [
+        f"머신 `{field('machine_id')}` · CPU `{field('cpu')}` · "
+        f"코어 `{field('core_count')}` · 코어 고정 `{field('affinity')}`",
+        f"엔진 `{field('engine_version')}` · 구성 `{field('build_config')}` · "
+        f"RHI `{field('rhi')}` · Substrate `{field('substrate')}`",
+        f"워밍업 `{field('warmup_seconds', 's')}` · 측정 `{field('measured_seconds', 's')}`",
+        "",
+        f"대조군: `{baseline or '없음'}`. 아래 값은 같은 N 의 대조군을 뺀 순증분(ms)입니다.",
+        "",
+        "| 조건 | " + " | ".join(f"N={n:,}" for n in ns) + " | 액터 1,000개당 |",
+        "|---|" + "---|" * (len(ns) + 1),
+    ]
+
     for cond in conditions:
-        cells = []
+        cells, points = [], []
         for n in ns:
-            entry = summary.get((cond, n))
+            entry = analysis.get((cond, n))
             if entry is None:
                 cells.append("—")
                 continue
-            median, spread, count = entry
-            mark = " ⚠" if spread > SPREAD_WARN else ""
-            cells.append(f"{median:.3f}{mark}")
-        lines.append(f"| `{cond or '기본'}` | " + " | ".join(cells) + " |")
+            state = verdict(entry)
+            if entry["is_baseline"]:
+                cells.append(f"({entry['raw']:.3f})")
+            elif state == "신호 없음":
+                cells.append("·")
+            elif state == "편차 큼":
+                cells.append(f"{entry['net']:.3f} ⚠")
+            else:
+                cells.append(f"{entry['net']:.3f}")
+                points.append((n, entry["net"]))
+        per_1k, is_fit = slope_per_1k(points)
+        if per_1k is None:
+            cells.append("—")
+        elif is_fit:
+            cells.append(f"**{per_1k:.3f}**")
+        else:
+            cells.append(f"~{per_1k:.3f}")
+        lines.append(f"| `{cond}` | " + " | ".join(cells) + " |")
 
-    lines.append("")
-    lines.append(f"값은 {metric} 의 중앙값(ms)이고 반복들의 중앙값을 다시 취했습니다. "
-                 f"⚠ 는 반복 간 편차가 {SPREAD_WARN:.0%}를 넘은 조합입니다.")
+    lines += [
+        "",
+        f"괄호는 대조군의 절대값입니다. `·` 는 순증분이 {SIGNAL_FLOOR}ms 미만이라 "
+        f"베이스라인 잡음에 묻힌 구간이고, ⚠ 는 반복 간 편차가 순증분의 "
+        f"{SPREAD_WARN:.0%}를 넘은 조합입니다. 둘 다 그 지점에서는 측정이 성립하지 "
+        f"않았다는 뜻이지 값이 그렇다는 뜻이 아닙니다.",
+        "",
+        f"맨 오른쪽은 신뢰 구간만 써서 원점을 지나는 직선을 맞춘 기울기입니다. "
+        f"상수 베이스라인이 소거되므로 절대값보다 이쪽이 안정적입니다. "
+        f"`~` 가 붙은 값은 믿을 수 있는 점이 하나뿐이라 직선을 맞춘 게 아니라 "
+        f"그 점 하나에서 나눈 추정치입니다.",
+    ]
+
+    hitch = [float(r["hitch_ratio"]) for r in rows if r.get("hitch_ratio") not in (None, "")]
+    if hitch:
+        lines += ["", f"히치 비율 중앙값 {statistics.median(hitch):.2%}, "
+                      f"최대 {max(hitch):.2%}."]
     return "\n".join(lines)
 
 
-def svg_chart(summary, metric: str, width=720, height=420) -> str:
-    """로그 x축 선형 y축 꺾은선. N 이 10배씩 뛰므로 로그가 맞다."""
-    conditions = sorted({k[0] for k in summary})
-    ns = sorted({k[1] for k in summary})
-    if not ns:
-        return "<svg xmlns='http://www.w3.org/2000/svg'></svg>"
+def svg_chart(analysis, metric, width=760, height=430) -> str:
+    series = defaultdict(list)
+    for (cond, n), entry in analysis.items():
+        if entry["is_baseline"] or entry["net"] < SIGNAL_FLOOR:
+            continue
+        series[cond].append((n, entry["net"]))
+    for cond in series:
+        series[cond].sort()
 
-    pad_l, pad_r, pad_t, pad_b = 64, 140, 24, 48
-    plot_w = width - pad_l - pad_r
-    plot_h = height - pad_t - pad_b
+    if not series:
+        return ("<svg xmlns='http://www.w3.org/2000/svg' width='400' height='60'>"
+                "<text x='8' y='34'>측정 가능한 신호가 없습니다</text></svg>")
 
+    ns = sorted({n for pts in series.values() for n, _ in pts})
+    pad_l, pad_r, pad_t, pad_b = 70, 150, 26, 50
+    plot_w, plot_h = width - pad_l - pad_r, height - pad_t - pad_b
     x_min, x_max = math.log10(min(ns)), math.log10(max(ns))
     x_span = (x_max - x_min) or 1.0
-    y_max = max(v[0] for v in summary.values()) or 1.0
-    y_max *= 1.1
+    y_max = max(v for pts in series.values() for _, v in pts) * 1.12 or 1.0
 
-    def px(n):
-        return pad_l + (math.log10(n) - x_min) / x_span * plot_w
-
-    def py(value):
-        return pad_t + plot_h - (value / y_max) * plot_h
+    px = lambda n: pad_l + (math.log10(n) - x_min) / x_span * plot_w
+    py = lambda v: pad_t + plot_h - (v / y_max) * plot_h
 
     colors = ["#2f6fdb", "#d1495b", "#3f8f5a", "#b07d2b", "#6a4c93", "#1f7a8c"]
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {width} {height}' "
-        f"font-family='ui-sans-serif, system-ui, sans-serif' font-size='12'>",
-        f"<rect width='{width}' height='{height}' fill='white'/>",
-        f"<line x1='{pad_l}' y1='{pad_t + plot_h}' x2='{pad_l + plot_w}' y2='{pad_t + plot_h}' stroke='#333'/>",
-        f"<line x1='{pad_l}' y1='{pad_t}' x2='{pad_l}' y2='{pad_t + plot_h}' stroke='#333'/>",
-    ]
+    out = [f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {width} {height}' "
+           f"font-family='ui-sans-serif, system-ui, sans-serif' font-size='12'>",
+           f"<rect width='{width}' height='{height}' fill='white'/>",
+           f"<line x1='{pad_l}' y1='{pad_t+plot_h}' x2='{pad_l+plot_w}' y2='{pad_t+plot_h}' stroke='#333'/>",
+           f"<line x1='{pad_l}' y1='{pad_t}' x2='{pad_l}' y2='{pad_t+plot_h}' stroke='#333'/>"]
 
     for step in range(5):
         value = y_max * step / 4
         y = py(value)
-        parts.append(f"<line x1='{pad_l}' y1='{y:.1f}' x2='{pad_l + plot_w}' y2='{y:.1f}' "
-                     f"stroke='#e6e6e6'/>")
-        parts.append(f"<text x='{pad_l - 8}' y='{y + 4:.1f}' text-anchor='end' fill='#555'>"
-                     f"{value:.2f}</text>")
-
+        out.append(f"<line x1='{pad_l}' y1='{y:.1f}' x2='{pad_l+plot_w}' y2='{y:.1f}' stroke='#e6e6e6'/>")
+        out.append(f"<text x='{pad_l-8}' y='{y+4:.1f}' text-anchor='end' fill='#555'>{value:.2f}</text>")
     for n in ns:
-        x = px(n)
-        parts.append(f"<text x='{x:.1f}' y='{pad_t + plot_h + 20}' text-anchor='middle' "
-                     f"fill='#555'>{n:,}</text>")
+        out.append(f"<text x='{px(n):.1f}' y='{pad_t+plot_h+20}' text-anchor='middle' fill='#555'>{n:,}</text>")
 
-    for index, cond in enumerate(conditions):
+    for index, (cond, pts) in enumerate(sorted(series.items())):
         color = colors[index % len(colors)]
-        points = [(px(n), py(summary[(cond, n)][0])) for n in ns if (cond, n) in summary]
-        if not points:
-            continue
-        path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}"
-                        for i, (x, y) in enumerate(points))
-        parts.append(f"<path d='{path}' fill='none' stroke='{color}' stroke-width='2'/>")
-        for x, y in points:
-            parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3' fill='{color}'/>")
+        path = " ".join(f"{'M' if i == 0 else 'L'}{px(n):.1f},{py(v):.1f}"
+                        for i, (n, v) in enumerate(pts))
+        out.append(f"<path d='{path}' fill='none' stroke='{color}' stroke-width='2'/>")
+        for n, v in pts:
+            out.append(f"<circle cx='{px(n):.1f}' cy='{py(v):.1f}' r='3' fill='{color}'/>")
         label_y = pad_t + 16 + index * 18
-        parts.append(f"<line x1='{pad_l + plot_w + 12}' y1='{label_y - 4}' "
-                     f"x2='{pad_l + plot_w + 32}' y2='{label_y - 4}' stroke='{color}' stroke-width='2'/>")
-        parts.append(f"<text x='{pad_l + plot_w + 38}' y='{label_y}' fill='#333'>"
-                     f"{cond or '기본'}</text>")
+        out.append(f"<line x1='{pad_l+plot_w+12}' y1='{label_y-4}' x2='{pad_l+plot_w+32}' "
+                   f"y2='{label_y-4}' stroke='{color}' stroke-width='2'/>")
+        out.append(f"<text x='{pad_l+plot_w+38}' y='{label_y}' fill='#333'>{cond}</text>")
 
-    parts.append(f"<text x='{pad_l + plot_w / 2:.1f}' y='{height - 8}' text-anchor='middle' "
-                 f"fill='#333'>N (로그 눈금)</text>")
-    parts.append(f"<text x='16' y='{pad_t + 12}' fill='#333'>{metric} (ms)</text>")
-    parts.append("</svg>")
-    return "\n".join(parts)
+    out.append(f"<text x='{pad_l+plot_w/2:.1f}' y='{height-8}' text-anchor='middle' fill='#333'>N (로그 눈금)</text>")
+    out.append(f"<text x='14' y='{pad_t+12}' fill='#333'>{metric} 순증분 (ms)</text>")
+    out.append("</svg>")
+    return "\n".join(out)
 
 
 def main() -> int:
@@ -144,6 +226,8 @@ def main() -> int:
     parser.add_argument("csv_path")
     parser.add_argument("--metric", default="game_ms_median")
     parser.add_argument("--title", default="스케일 곡선")
+    parser.add_argument("--baseline", default="",
+                        help="대조군 조건 문자열. 비우면 disabled 를 자동으로 찾는다")
     parser.add_argument("--out-md", required=True)
     parser.add_argument("--out-svg", required=True)
     args = parser.parse_args()
@@ -153,31 +237,32 @@ def main() -> int:
         print("빈 CSV 다.")
         return 1
 
-    summary = summarize(group(rows, args.metric))
-    if not summary:
+    buckets = collect(rows, args.metric)
+    if not buckets:
         print(f"{args.metric} 컬럼에 값이 없다.")
         return 1
 
+    baseline = pick_baseline({k[0] for k in buckets}, args.baseline)
+    if baseline is None:
+        print("대조군을 찾지 못했다. --baseline 으로 지정하면 순증분을 계산한다.")
+    analysis = analyse(buckets, baseline)
+
     svg_path = Path(args.out_svg)
     svg_path.parent.mkdir(parents=True, exist_ok=True)
-    svg_path.write_text(svg_chart(summary, args.metric), encoding="utf-8")
-
-    first = rows[0]
-    header = (f"# {args.title}\n\n"
-              f"머신 `{first['machine_id']}` · 엔진 `{first['engine_version']}` · "
-              f"구성 `{first['build_config']}` · RHI `{first['rhi']}` · "
-              f"Substrate `{first['substrate']}`\n\n"
-              f"워밍업 {first['warmup_frames']} 프레임, 측정 {first['measured_frames']} 프레임.\n\n"
-              f"![{args.metric}]({svg_path.name})\n\n")
+    svg_path.write_text(svg_chart(analysis, args.metric), encoding="utf-8")
 
     md_path = Path(args.out_md)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    md_path.write_text(header + markdown_table(summary, args.metric) + "\n", encoding="utf-8")
+    body = (f"# {args.title}\n\n"
+            + markdown(rows, analysis, args.metric, baseline)
+            + f"\n\n![{args.metric}]({svg_path.name})\n")
+    md_path.write_text(body, encoding="utf-8")
 
-    warned = [k for k, v in summary.items() if v[1] > SPREAD_WARN]
-    print(f"{md_path} 와 {svg_path} 생성. 조합 {len(summary)}개.")
-    if warned:
-        print(f"반복 편차 {SPREAD_WARN:.0%} 초과 {len(warned)}개 — 리포트에 ⚠ 로 표시했다.")
+    states = defaultdict(int)
+    for entry in analysis.values():
+        states[verdict(entry)] += 1
+    print(f"{md_path} 와 {svg_path} 생성.")
+    print("  " + " · ".join(f"{k} {v}" for k, v in sorted(states.items())))
     return 0
 
 

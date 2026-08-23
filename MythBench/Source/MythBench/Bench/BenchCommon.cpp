@@ -18,11 +18,13 @@ FBenchRunSpec FBenchRunSpec::FromCommandLine()
 	FParse::Value(Cmd, TEXT("N="),         Spec.N);
 	FParse::Value(Cmd, TEXT("mode="),      Spec.Mode);
 	FParse::Value(Cmd, TEXT("tickgroup="), Spec.TickGroup);
-	FParse::Value(Cmd, TEXT("warmup="),    Spec.WarmupFrames);
-	FParse::Value(Cmd, TEXT("frames="),    Spec.MeasureFrames);
-	FParse::Value(Cmd, TEXT("repeat="),    Spec.RepeatIndex);
-	FParse::Value(Cmd, TEXT("machineid="), Spec.MachineId);
-	FParse::Value(Cmd, TEXT("out="),       Spec.OutDir);
+	FParse::Value(Cmd, TEXT("warmupsec="),  Spec.WarmupSeconds);
+	FParse::Value(Cmd, TEXT("measuresec="), Spec.MeasureSeconds);
+	FParse::Value(Cmd, TEXT("maxframes="),  Spec.MaxFrames);
+	FParse::Value(Cmd, TEXT("repeat="),     Spec.RepeatIndex);
+	FParse::Value(Cmd, TEXT("machineid="),  Spec.MachineId);
+	FParse::Value(Cmd, TEXT("affinity="),   Spec.AffinityNote);
+	FParse::Value(Cmd, TEXT("out="),        Spec.OutDir);
 
 	Spec.TickGroup = Spec.TickGroup.ToLower();
 	return Spec;
@@ -31,9 +33,9 @@ FBenchRunSpec FBenchRunSpec::FromCommandLine()
 FString FBenchRunSpec::Describe() const
 {
 	return FString::Printf(
-		TEXT("scenario=%s N=%d mode=%s tickgroup=%s warmup=%d frames=%d repeat=%d"),
+		TEXT("scenario=%s N=%d mode=%s tickgroup=%s warmup=%.1fs measure=%.1fs repeat=%d"),
 		*Scenario, N, Mode.IsEmpty() ? TEXT("-") : *Mode, *TickGroup,
-		WarmupFrames, MeasureFrames, RepeatIndex);
+		WarmupSeconds, MeasureSeconds, RepeatIndex);
 }
 
 namespace
@@ -61,10 +63,12 @@ namespace
 	}
 }
 
-FBenchEnvironment FBenchEnvironment::Collect(const FString& InMachineId)
+FBenchEnvironment FBenchEnvironment::Collect(const FBenchRunSpec& Spec)
 {
 	FBenchEnvironment Env;
-	Env.MachineId     = InMachineId;
+	Env.MachineId     = Spec.MachineId;
+	Env.Affinity      = Spec.AffinityNote.IsEmpty() ? TEXT("none") : Spec.AffinityNote;
+	Env.CoreCount     = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
 	Env.Cpu           = FPlatformMisc::GetCPUBrand();
 	Env.Gpu           = FPlatformMisc::GetPrimaryGPUBrand();
 	Env.Os            = FPlatformMisc::GetOSVersion();
@@ -104,6 +108,8 @@ FString FBenchEnvironment::ToJson() const
 		TEXT("  \"cpu\": \"%s\",\n")
 		TEXT("  \"gpu\": \"%s\",\n")
 		TEXT("  \"ram_gb\": %d,\n")
+		TEXT("  \"core_count\": %d,\n")
+		TEXT("  \"affinity\": \"%s\",\n")
 		TEXT("  \"os\": \"%s\",\n")
 		TEXT("  \"engine_version\": \"%s\",\n")
 		TEXT("  \"build_config\": \"%s\",\n")
@@ -112,7 +118,8 @@ FString FBenchEnvironment::ToJson() const
 		TEXT("  \"scalability\": { %s }\n")
 		TEXT("}\n"),
 		*BenchJson::Escape(MachineId), *BenchJson::Escape(Cpu), *BenchJson::Escape(Gpu),
-		RamGb, *BenchJson::Escape(Os), *BenchJson::Escape(EngineVersion),
+		RamGb, CoreCount, *BenchJson::Escape(Affinity),
+		*BenchJson::Escape(Os), *BenchJson::Escape(EngineVersion),
 		*BenchJson::Escape(BuildConfig), *BenchJson::Escape(Rhi),
 		bSubstrate ? TEXT("true") : TEXT("false"), *Levels);
 }
@@ -143,4 +150,12 @@ FString BenchJson::Escape(const FString& In)
 	Out.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
 	Out.ReplaceInline(TEXT("\""), TEXT("\\\""));
 	return Out;
+}
+
+FString FBenchEnvironment::OneLine() const
+{
+	return FString::Printf(
+		TEXT("machine=%s cpu=%s cores=%d affinity=%s gpu=%s ram=%dGB os=%s engine=%s config=%s rhi=%s substrate=%s"),
+		*MachineId, *Cpu, CoreCount, *Affinity, *Gpu, RamGb, *Os,
+		*EngineVersion, *BuildConfig, *Rhi, bSubstrate ? TEXT("on") : TEXT("off"));
 }

@@ -293,12 +293,16 @@ M1 이 구현되어 있고 도구도 붙어 있다. 남은 건 빌드하고 한 
 ```
 python tools/run_bench.py --scenario tickvstimer --machine-id <머신이름> ^
   --mode tick,timer,disabled --n 10,100,1000,10000 --repeats 5 ^
-  --engine "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+  --warmup-sec 3 --measure-sec 10 --affinity FFFF ^
+  --engine "C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe"
 
 python tools/parse_results.py results/<머신이름> -o results/<머신이름>/aggregate.csv
 python tools/make_report.py results/<머신이름>/aggregate.csv --metric game_ms_median ^
-  --title "M1 Tick vs Timer" --out-md docs/10-synthetic.md --out-svg docs/m1-curve.svg
+  --title "M1 Tick vs Timer" --out-md docs/10-synthetic.md --out-svg docs/img/m1-curve.svg
 ```
+
+`--affinity` 는 하이브리드 CPU 에서만 필요하다. 마스크 정하는 법은 프로토콜 3.4 에 있다.
+`--rhi auto` 가 기본이라 M1 에는 `-nullrhi` 가 자동으로 붙는다.
 
 UE 없이 도구만 먼저 확인하려면 가짜 결과로 같은 사슬을 돌려볼 수 있다.
 
@@ -309,8 +313,9 @@ python tools/make_report.py /tmp/fake/aggregate.csv --out-md /tmp/fake/r.md --ou
 ```
 
 - 확인 — `results/<머신>/<날짜>/<조합>/` 아래에 `summary.json`, `env.json`, `frames.csv` 가 생긴다
-- 확인 — 리포트의 `disabled` 곡선이 평평하고 `tick` 곡선이 N 에 따라 올라간다
-- 확인 — 반복 편차 경고(⚠)가 뜨지 않는다. 뜨면 백그라운드 프로세스부터 의심한다
+- 확인 — `run.log` 의 `[quality]` 가 "경고 없음" 이다. 하나라도 뜨면 값을 쓰기 전에 원인을 찾는다
+- 확인 — 리포트에서 `tick` 이 N 에 따라 올라가고 `·`(신호 없음)과 ⚠(편차 큼)이 없다
+- 확인 — 측정 창이 조건과 무관하게 10초로 같다
 
 ### 6.7 나머지 항목
 

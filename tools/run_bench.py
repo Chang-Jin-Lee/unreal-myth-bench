@@ -23,9 +23,33 @@ DEFAULT_PROJECT = REPO_ROOT / "MythBench" / "MythBench.uproject"
 # 주기와 deadline 이 대상인 시나리오는 여기에 넣어 제외한다.
 NO_FIXED_TIMESTEP = {"deadline"}
 
+# 게임 스레드만 보는 항목. 렌더 스레드가 프레임을 잡으면 신호가 묻히므로
+# 기본으로 -nullrhi 를 붙인다. GPU·드로우 항목은 여기 넣지 않는다.
+CPU_ONLY = {"tickvstimer", "bpvscpp", "castimplements", "getallactors", "childactor"}
+
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "none"
+
+
+def use_nullrhi(args) -> bool:
+    if args.rhi == "null":
+        return True
+    if args.rhi == "real":
+        return False
+    return args.scenario.lower() in CPU_ONLY
+
+
+def wrap_affinity(cmd: list[str], mask: str) -> list[str]:
+    """윈도우에서 프로세스를 특정 코어에 묶는다.
+
+    13900KF 같은 하이브리드 CPU 는 게임 스레드가 P코어와 E코어를 오가면 프레임
+    시간이 크게 흔들린다. 측정 전에 묶어두는 편이 낫다.
+    """
+    if not mask:
+        return cmd
+    quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)
+    return ["cmd", "/c", "start", "/affinity", mask, "/wait", "/b", "", quoted]
 
 
 def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[str]:
@@ -35,8 +59,8 @@ def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[s
         "-game",
         f"-bench={args.scenario}",
         f"-N={n}",
-        f"-warmup={args.warmup}",
-        f"-frames={args.frames}",
+        f"-warmupsec={args.warmup_sec}",
+        f"-measuresec={args.measure_sec}",
         f"-repeat={repeat}",
         f"-machineid={args.machine_id}",
         f"-out={out_dir}",
@@ -55,8 +79,10 @@ def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[s
         cmd.append(f"-mode={mode}")
     if args.scenario.lower() not in NO_FIXED_TIMESTEP:
         cmd.append("-benchmark")
-    if args.nullrhi:
+    if use_nullrhi(args):
         cmd.append("-nullrhi")
+    if args.affinity:
+        cmd.append(f"-affinity={args.affinity}")
     if args.trace:
         cmd.append(f"-trace={args.trace}")
         cmd.append(f"-tracefile={out_dir / 'run.utrace'}")
@@ -78,13 +104,18 @@ def main() -> int:
                         help="시나리오별 추가 축. 쉼표로 구분. 예: tick,timer,disabled")
     parser.add_argument("--tickgroup", default="prephysics")
     parser.add_argument("--repeats", type=int, default=5)
-    parser.add_argument("--warmup", type=int, default=120)
-    parser.add_argument("--frames", type=int, default=600)
+    parser.add_argument("--warmup-sec", type=float, default=3.0,
+                        help="클럭이 안정될 때까지 버리는 시간")
+    parser.add_argument("--measure-sec", type=float, default=10.0,
+                        help="측정 창. 프레임 수가 아니라 시간으로 자른다")
+    parser.add_argument("--affinity", default="",
+                        help="16진 코어 마스크. 하이브리드 CPU 는 P코어에 고정한다. "
+                             "예: 13900KF 의 P코어 16스레드는 FFFF")
     parser.add_argument("--out", default=str(REPO_ROOT / "results"))
     parser.add_argument("--trace", default="",
                         help="예: cpu,frame,counters,bookmark. 비우면 trace 끔")
-    parser.add_argument("--nullrhi", action="store_true",
-                        help="CPU 전용 항목과 CI 에서만. GPU·드로우 항목에는 쓰지 않는다")
+    parser.add_argument("--rhi", choices=("auto", "null", "real"), default="auto",
+                        help="auto 는 CPU 전용 항목에 -nullrhi 를 붙인다")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -98,7 +129,11 @@ def main() -> int:
     date = datetime.date.today().isoformat()
 
     planned = len(ns) * len(modes) * args.repeats
+    est_min = planned * (args.warmup_sec + args.measure_sec + 8.0) / 60.0
     print(f"{args.scenario}: N {len(ns)}종 × mode {len(modes)}종 × 반복 {args.repeats} = {planned}회")
+    print(f"  워밍업 {args.warmup_sec}s + 측정 {args.measure_sec}s · "
+          f"nullrhi={use_nullrhi(args)} · affinity={args.affinity or '없음'}")
+    print(f"  예상 소요 약 {est_min:.0f}분 (엔진 기동 시간 포함)")
 
     failures = 0
     for n in ns:
@@ -107,7 +142,8 @@ def main() -> int:
                 name = f"{slug(args.scenario)}_N{n}_{slug(mode)}_r{repeat}"
                 out_dir = Path(args.out) / args.machine_id / date / name
                 out_dir.mkdir(parents=True, exist_ok=True)
-                cmd = build_command(args, n, mode, repeat, out_dir)
+                cmd = wrap_affinity(build_command(args, n, mode, repeat, out_dir),
+                                    args.affinity)
 
                 if args.dry_run:
                     print(" ".join(cmd))
