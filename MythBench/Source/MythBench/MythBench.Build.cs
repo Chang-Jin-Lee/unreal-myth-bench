@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class DemoGame : ModuleRules
+public class MythBench : ModuleRules
 {
-	public DemoGame(ReadOnlyTargetRules Target) : base(Target)
+	public MythBench(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	

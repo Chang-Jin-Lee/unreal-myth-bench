@@ -3,13 +3,13 @@
 using UnrealBuildTool;
 using System.Collections.Generic;
 
-public class DemoGameEditorTarget : TargetRules
+public class MythBenchTarget : TargetRules
 {
-	public DemoGameEditorTarget( TargetInfo Target) : base(Target)
+	public MythBenchTarget(TargetInfo Target) : base(Target)
 	{
-		Type = TargetType.Editor;
+		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
-		ExtraModuleNames.Add("DemoGame");
+		ExtraModuleNames.Add("MythBench");
 	}
 }
