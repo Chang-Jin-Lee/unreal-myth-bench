@@ -8,7 +8,9 @@ public class MythBench : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		// RenderCore: GGameThreadTime / GRenderThreadTime / GGPUFrameTime 전역을 읽는다.
+		// 입력은 쓰지 않으므로 InputCore / EnhancedInput 은 뺐다.
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "RenderCore" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

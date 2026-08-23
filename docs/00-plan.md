@@ -256,37 +256,61 @@ Quality Preset을 Scalable이 아니라 Maximum으로 두는 이유는 6.3에 �
 
 ### 6.4 벤치 맵
 
-- `Content/Maps/BenchMap.umap` 하나. 빈 레벨에 PlayerStart와 고정 카메라만
-- 라이트는 최소로. GPU 항목이 아닌 이상 렌더링 부하가 신호를 흐린다
-- 액터를 스폰할 원점 기준만 잡아둔다
-- 확인 — PIE에서 프레임 시간이 1ms 아래로 안정적으로 나온다
+**여기가 유일하게 에디터가 필요한 단계다.** 나머지는 전부 텍스트 파일이라 원격에서 만들 수 있다.
 
-### 6.5 러너 골격
+- `Content/Maps/BenchMap.umap`. Empty Level 로 만들고 PlayerStart 하나만 둔다
+- 라이트는 넣지 않는다. GPU 항목이 아닌 이상 렌더링 부하가 신호를 흐린다
+- `DefaultEngine.ini` 의 `GameDefaultMap` 과 `EditorStartupMap` 이 이미 `/Game/Maps/BenchMap` 을
+  가리키고 있다. 경로가 정확히 맞아야 한다
+- 확인 — PIE 에서 프레임 시간이 안정적으로 나온다
 
-핵심 구조는 이렇다.
+### 6.5 러너
 
-- `UBenchScenario` — `UObject` 파생 추상 클래스. `Setup(int32 N)` / `RunFrame()` / `Teardown()` / `GetName()`
-- `UBenchSubsystem` — `UGameInstanceSubsystem`. 시나리오 등록, 커맨드라인 파싱, 워밍업·측정·반복 루프, 결과 기록
-- `FBenchRunSpec` — 시나리오명, N, 워밍업 프레임, 측정 프레임, 반복 횟수, 출력 경로
-- `FBenchEnvironment` — CPU·GPU·RAM·OS·엔진 버전·빌드 구성을 수집해 `env.json`으로 떨군다
+구현되어 있다. 구조는 이렇다.
 
-커맨드라인 형식을 여기서 확정한다.
+| 파일 | 역할 |
+|---|---|
+| `Bench/BenchCommon.h/.cpp` | `FBenchRunSpec` 커맨드라인 파싱, `FBenchEnvironment` 수집, `FBenchStats` 중앙값·P95 |
+| `Bench/BenchScenario.h` | 시나리오 인터페이스. 항목 하나가 클래스 하나다 |
+| `Bench/BenchSubsystem.h/.cpp` | `-bench=` 가 있을 때만 러너를 스폰한다. 없으면 에디터에 끼어들지 않는다 |
+| `Bench/BenchRunner.h/.cpp` | 워밍업·측정 구간 관리, CSV 캡처, trace 북마크, 결과 파일 기록, 종료 |
+| `Scenarios/TickVsTimerScenario.h/.cpp` | M1 |
+
+커맨드라인은 이렇게 받는다.
 
 ```
--bench=<시나리오명> -N=<정수> -warmup=<프레임> -frames=<프레임> -repeats=<횟수> -out=<경로>
+-bench=<이름> -N=<정수> -mode=<문자열> -tickgroup=<prephysics|duringphysics|postphysics>
+-warmup=<프레임> -frames=<프레임> -repeat=<인덱스> -machineid=<이름> -out=<경로>
 ```
 
-확인 — 시나리오 없이 실행해도 `env.json`이 정상적으로 나온다
+항목을 추가하려면 `UBenchScenario` 를 상속하고 `BenchRunner.cpp` 의 `CreateScenario` 에
+한 줄 넣으면 된다.
 
 ### 6.6 첫 시나리오로 파이프라인 관통
 
-M1(Tick vs Timer) 하나만 구현해서 **끝까지** 흘려본다.
-러너 → 헤드리스 실행 → CSV → 파싱 → 그래프 → 마크다운 리포트.
+M1 이 구현되어 있고 도구도 붙어 있다. 남은 건 빌드하고 한 번 돌려보는 것이다.
 
-여기서 결과 스키마가 확정된다. 나중에 컬럼을 바꾸면 앞서 뽑은 데이터를 다 버리게 되므로
-이 단계에서 충분히 고민한다.
+```
+python tools/run_bench.py --scenario tickvstimer --machine-id <머신이름> ^
+  --mode tick,timer,disabled --n 10,100,1000,10000 --repeats 5 ^
+  --engine "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
 
-- 확인 — 명령어 한 줄로 `results/<machine-id>/<date>/` 아래에 CSV와 그래프가 생긴다
+python tools/parse_results.py results/<머신이름> -o results/<머신이름>/aggregate.csv
+python tools/make_report.py results/<머신이름>/aggregate.csv --metric game_ms_median ^
+  --title "M1 Tick vs Timer" --out-md docs/10-synthetic.md --out-svg docs/m1-curve.svg
+```
+
+UE 없이 도구만 먼저 확인하려면 가짜 결과로 같은 사슬을 돌려볼 수 있다.
+
+```
+python tools/tests/make_fake_results.py --out /tmp/fake
+python tools/parse_results.py /tmp/fake -o /tmp/fake/aggregate.csv
+python tools/make_report.py /tmp/fake/aggregate.csv --out-md /tmp/fake/r.md --out-svg /tmp/fake/c.svg
+```
+
+- 확인 — `results/<머신>/<날짜>/<조합>/` 아래에 `summary.json`, `env.json`, `frames.csv` 가 생긴다
+- 확인 — 리포트의 `disabled` 곡선이 평평하고 `tick` 곡선이 N 에 따라 올라간다
+- 확인 — 반복 편차 경고(⚠)가 뜨지 않는다. 뜨면 백그라운드 프로세스부터 의심한다
 
 ### 6.7 나머지 항목
 
