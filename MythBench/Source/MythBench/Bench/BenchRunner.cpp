@@ -3,6 +3,7 @@
 #include "Bench/BenchScenario.h"
 #include "Scenarios/TickVsTimerScenario.h"
 
+#include "DynamicRHI.h"
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
@@ -128,7 +129,7 @@ void ABenchRunner::Tick(float DeltaSeconds)
 		ScenarioSamplesMs.Add(ScenarioMs);
 		GameThreadSamplesMs.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));
 		RenderThreadSamplesMs.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));
-		GpuSamplesMs.Add(FPlatformTime::ToMilliseconds(GGPUFrameTime));
+		GpuSamplesMs.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
 
 		if (FrameSamplesMs.Num() >= Spec.MeasureFrames)
 		{
