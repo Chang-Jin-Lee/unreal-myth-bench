@@ -11,9 +11,13 @@ Build/
 *.opendb
 *.sdf
 *.sln
+*.slnx
 *.suo
 *.xcodeproj/
 *.xcworkspace/
+
+# Visual Studio 프로젝트 업그레이드 로그
+UpgradeLog*.htm
 
 # Insights trace files are large. Keep the parsed summaries, not the raw traces.
 *.utrace
