@@ -1,0 +1,25 @@
+{
+  "scenario": "tickvstimer",
+  "param_n": 10,
+  "param_extra": "mode=tick;tickgroup=prephysics",
+  "repeat_index": 0,
+  "warmup_frames": 120,
+  "measured_frames": 600,
+  "frame_ms":       { "median": 1.2440, "p95": 1.6662, "min": 0.6249, "max": 19.0709 },
+  "scenario_ms":    { "median": 0.0004, "p95": 0.0007, "min": 0.0003, "max": 0.0211 },
+  "game_ms":        { "median": 0.6933, "p95": 0.9692, "min": 0.5690, "max": 14.9000 },
+  "render_ms":      { "median": 1.2407, "p95": 1.7203, "min": 0.7031, "max": 2.1698 },
+  "gpu_ms":         { "median": 0.3547, "p95": 0.3809, "min": 0.3316, "max": 0.4746 },
+  "environment": {
+  "machine_id": "desktop-13900kf",
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900KF",
+  "gpu": "NVIDIA GeForce RTX 4060 Ti",
+  "ram_gb": 128,
+  "os": "10.0.26200.1.256.64bit",
+  "engine_version": "5.8.1-56057345+++UE5+Release-5.8",
+  "build_config": "Development",
+  "rhi": "D3D12 (SM6)",
+  "substrate": false,
+  "scalability": { "view_distance": 3, "anti_aliasing": 3, "shadow": 3, "post_process": 3, "texture": 3, "effects": 3, "foliage": 3, "shading": 3 }
+}
+}

@@ -1,0 +1,42 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 720 420' font-family='ui-sans-serif, system-ui, sans-serif' font-size='12'>
+<rect width='720' height='420' fill='white'/>
+<line x1='64' y1='372' x2='580' y2='372' stroke='#333'/>
+<line x1='64' y1='24' x2='64' y2='372' stroke='#333'/>
+<line x1='64' y1='372.0' x2='580' y2='372.0' stroke='#e6e6e6'/>
+<text x='56' y='376.0' text-anchor='end' fill='#555'>0.00</text>
+<line x1='64' y1='285.0' x2='580' y2='285.0' stroke='#e6e6e6'/>
+<text x='56' y='289.0' text-anchor='end' fill='#555'>1.27</text>
+<line x1='64' y1='198.0' x2='580' y2='198.0' stroke='#e6e6e6'/>
+<text x='56' y='202.0' text-anchor='end' fill='#555'>2.54</text>
+<line x1='64' y1='111.0' x2='580' y2='111.0' stroke='#e6e6e6'/>
+<text x='56' y='115.0' text-anchor='end' fill='#555'>3.81</text>
+<line x1='64' y1='24.0' x2='580' y2='24.0' stroke='#e6e6e6'/>
+<text x='56' y='28.0' text-anchor='end' fill='#555'>5.08</text>
+<text x='64.0' y='392' text-anchor='middle' fill='#555'>10</text>
+<text x='236.0' y='392' text-anchor='middle' fill='#555'>100</text>
+<text x='408.0' y='392' text-anchor='middle' fill='#555'>1,000</text>
+<text x='580.0' y='392' text-anchor='middle' fill='#555'>10,000</text>
+<path d='M64.0,316.6 L236.0,317.6 L408.0,318.8 L580.0,313.5' fill='none' stroke='#2f6fdb' stroke-width='2'/>
+<circle cx='64.0' cy='316.6' r='3' fill='#2f6fdb'/>
+<circle cx='236.0' cy='317.6' r='3' fill='#2f6fdb'/>
+<circle cx='408.0' cy='318.8' r='3' fill='#2f6fdb'/>
+<circle cx='580.0' cy='313.5' r='3' fill='#2f6fdb'/>
+<line x1='592' y1='36' x2='612' y2='36' stroke='#2f6fdb' stroke-width='2'/>
+<text x='618' y='40' fill='#333'>mode=disabled;tickgroup=prephysics</text>
+<path d='M64.0,315.5 L236.0,312.7 L408.0,294.6 L580.0,55.6' fill='none' stroke='#d1495b' stroke-width='2'/>
+<circle cx='64.0' cy='315.5' r='3' fill='#d1495b'/>
+<circle cx='236.0' cy='312.7' r='3' fill='#d1495b'/>
+<circle cx='408.0' cy='294.6' r='3' fill='#d1495b'/>
+<circle cx='580.0' cy='55.6' r='3' fill='#d1495b'/>
+<line x1='592' y1='54' x2='612' y2='54' stroke='#d1495b' stroke-width='2'/>
+<text x='618' y='58' fill='#333'>mode=tick;tickgroup=prephysics</text>
+<path d='M64.0,319.8 L236.0,314.4 L408.0,309.3 L580.0,295.8' fill='none' stroke='#3f8f5a' stroke-width='2'/>
+<circle cx='64.0' cy='319.8' r='3' fill='#3f8f5a'/>
+<circle cx='236.0' cy='314.4' r='3' fill='#3f8f5a'/>
+<circle cx='408.0' cy='309.3' r='3' fill='#3f8f5a'/>
+<circle cx='580.0' cy='295.8' r='3' fill='#3f8f5a'/>
+<line x1='592' y1='72' x2='612' y2='72' stroke='#3f8f5a' stroke-width='2'/>
+<text x='618' y='76' fill='#333'>mode=timer;tickgroup=prephysics</text>
+<text x='322.0' y='412' text-anchor='middle' fill='#333'>N (로그 눈금)</text>
+<text x='16' y='36' fill='#333'>game_ms_median (ms)</text>
+</svg>
