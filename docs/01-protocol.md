@@ -294,7 +294,81 @@ DumpGPU
 | M8 deadline | CSV + Insights `frame` | 실행 시각을 카운터로 기록 | 실행 간격 분포, deadline 초과 비율. 프레임 부하를 올려가며 무너지는 지점 |
 | M9 Paper2D | `stat unit` + `ProfileGPU` | 없음 | 드로우콜 수, 배칭 여부, GPU 시간 |
 
-### 5.4 보조로 쓰는 것들
+### 5.4 Insights 로 A/B 하기
+
+러너가 내는 `game_ms` 는 프레임 전체의 게임 스레드 시간이다. **그 시간이 어느 함수에서
+나왔는지는 답하지 못한다.** 그건 Insights 가 답한다. 그리고 러너 숫자와 Insights 숫자가
+어긋나면 러너를 의심해야 하므로, 이 대조 자체가 하네스의 검증이다.
+
+#### 두 번 돌린다
+
+측정 스윕에서 `cpu` 채널을 켜면 안 된다. 액터 1만 개가 수천 프레임을 도는 동안 이벤트가
+쏟아져서 계측 오버헤드가 결과를 바꾼다. 그래서 목적을 나눈다.
+
+| | 목적 | trace | 반복 | 인용 |
+|---|---|---|---|---|
+| 1패스 | 숫자를 얻는다 | 끔 | 5회 | **이 숫자를 쓴다** |
+| 2패스 | 원인을 본다 | 켬 | 조건당 1회 | 쓰지 않는다 |
+
+```
+# 1패스 — 숫자
+python tools/run_bench.py --scenario tickvstimer --machine-id <머신> ^
+  --mode tick,timer,disabled --n 10,100,1000,10000 --repeats 5 --affinity FFFF
+
+# 2패스 — trace
+python tools/run_bench.py --scenario tickvstimer --machine-id <머신> ^
+  --mode tick,timer,disabled --n 10000 --repeats 1 --affinity FFFF ^
+  --trace cpu,frame,counters,bookmark,gpu --out results-trace
+```
+
+2패스 결과는 `results-trace/` 처럼 따로 둔다. 같은 트리에 섞으면 집계가 오염된다.
+
+#### 무엇을 열고 무엇을 보나
+
+`UnrealInsights.exe -OpenTraceFile=<경로>` 로 열고 Timing Insights 탭을 본다.
+
+**측정 구간부터 자른다.** Frames 트랙에서 `BenchMeasureStart` 와 `BenchMeasureEnd`
+북마크 사이만 선택한다. 워밍업이 섞이면 숫자가 달라진다. 러너가 이 북마크를 심어두는 이유다.
+
+Timers 패널을 GameThread 로 필터하고 Inclusive time 내림차순으로 본다.
+
+| 볼 것 | 왜 |
+|---|---|
+| `MythBench_ScenarioFrame` | 러너가 심은 스코프. 시나리오가 직접 쓰는 시간 |
+| `TickActor` / `TickComponent` / 틱 태스크 | M1 의 본체 |
+| `FTimerManager` 관련 | Timer 모드에서 여기가 부풀어야 한다 |
+| **Instance count** | 시간만큼 중요하다. Tick 은 프레임당 N 회로 고르고, Timer 는 주기마다 몰린다 |
+
+Counters 패널에서 `Bench/ActorCount` 로 조건을 확인한다. 엉뚱한 trace 를 보고 있지 않은지
+검증하는 가장 빠른 방법이다.
+
+GPU 트랙은 `full` 프로파일에서만 의미가 있다. `cpu` 프로파일은 `-nullrhi` 라 비어 있다.
+
+#### 러너 숫자와 대조한다
+
+| 러너가 낸 값 | Insights 에서 볼 것 | 맞아야 하는 범위 |
+|---|---|---|
+| `game_ms` 중앙값 | 선택 구간 GameThread 프레임 시간 중앙값 | ±5% |
+| `gpu_ms` 중앙값 | GPU 트랙 프레임 시간 (`full` 만) | ±10% |
+| `average_fps` | 선택 구간 프레임 수 ÷ 구간 길이 | 거의 일치 |
+
+벗어나면 러너 쪽을 먼저 의심한다. 대조 결과는 세션 로그에 적는다.
+
+#### 전부 열 필요는 없다
+
+60회를 다 열면 하루가 간다. 열 가치가 있는 것은 셋이다.
+
+- 가장 큰 N. 신호가 가장 크고 원인이 가장 잘 보인다
+- `[quality]` 경고가 뜬 실행
+- **중앙값과 P95 의 순위가 뒤집힌 조건.** 여기서 원인이 나온다. 2차 측정에서 Timer 가
+  중앙값은 Tick 의 1/4 인데 P95 는 더 컸는데, Insights 의 Instance count 를 보면
+  타이머가 어느 프레임에 몰리는지 눈으로 확인된다
+
+`tools/export_insights.py` 로 타이머 통계를 CSV 로 뽑을 수도 있다. 다만 내보내기 콘솔
+명령 이름이 엔진 버전마다 다르므로 처음 한 번은 확인이 필요하다. `--list-candidates` 로
+후보를 보고 GUI 콘솔에서 자동완성으로 실제 이름을 찾은 뒤 `--cmd` 로 지정한다.
+
+### 5.5 보조로 쓰는 것들
 
 - `stat namedevents` — 외부 프로파일러나 Insights에서 스코프 이름을 보이게 한다. 오버헤드가 있으므로 원인 분석할 때만 켜고 최종 수치를 잴 때는 끈다
 - `stat dumphitches` — 히치가 의심될 때
@@ -303,7 +377,7 @@ DumpGPU
 - Reference Viewer — 에디터에서 에셋 우클릭. M4의 주력
 - Size Map — 같은 메뉴. 참조를 따라간 총 디스크 크기
 
-### 5.5 흔히 저지르는 실수
+### 5.6 흔히 저지르는 실수
 
 - 워밍업 없이 첫 프레임부터 재기. 셰이더 컴파일과 스트리밍이 섞인다
 - 에디터 PIE에서 재고 그 숫자를 발표하기. 에디터는 별도 부하가 있다. `-game`으로 독립 실행한다
@@ -312,6 +386,9 @@ DumpGPU
 - Development 수치를 출하 성능처럼 말하기
 - 평균만 보고 히치를 놓치기
 - 창 포커스를 잃은 채로 재기. 백그라운드에서 프레임 제한이 걸린다
+- trace 를 켠 채로 잰 숫자를 인용하기. 계측 오버헤드가 결과에 섞인다
+- `-nullrhi` 로 잰 실행에서 GPU 시간이나 fps 를 읽기. 그 둘은 `full` 프로파일에만 있다
+- 중앙값만 보고 결론 내기. 순위가 P95 에서 뒤집히는 경우가 실제로 나왔다
 
 ---
 

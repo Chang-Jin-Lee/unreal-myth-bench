@@ -23,6 +23,7 @@ FBenchRunSpec FBenchRunSpec::FromCommandLine()
 	FParse::Value(Cmd, TEXT("maxframes="),  Spec.MaxFrames);
 	FParse::Value(Cmd, TEXT("repeat="),     Spec.RepeatIndex);
 	FParse::Value(Cmd, TEXT("machineid="),  Spec.MachineId);
+	FParse::Value(Cmd, TEXT("profile="),    Spec.Profile);
 	FParse::Value(Cmd, TEXT("affinity="),   Spec.AffinityNote);
 	FParse::Value(Cmd, TEXT("out="),        Spec.OutDir);
 
@@ -33,8 +34,8 @@ FBenchRunSpec FBenchRunSpec::FromCommandLine()
 FString FBenchRunSpec::Describe() const
 {
 	return FString::Printf(
-		TEXT("scenario=%s N=%d mode=%s tickgroup=%s warmup=%.1fs measure=%.1fs repeat=%d"),
-		*Scenario, N, Mode.IsEmpty() ? TEXT("-") : *Mode, *TickGroup,
+		TEXT("scenario=%s N=%d mode=%s tickgroup=%s profile=%s warmup=%.1fs measure=%.1fs repeat=%d"),
+		*Scenario, N, Mode.IsEmpty() ? TEXT("-") : *Mode, *TickGroup, *Profile,
 		WarmupSeconds, MeasureSeconds, RepeatIndex);
 }
 

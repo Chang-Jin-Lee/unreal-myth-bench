@@ -226,7 +226,7 @@ FBenchQuality ABenchRunner::Judge() const
 			TEXT("히치 %.1f%% (%d 프레임). 백그라운드 프로세스와 코어 고정을 확인한다"),
 			Q.HitchRatio * 100.0, Q.HitchCount));
 	}
-	if (Q.bRenderBound)
+	if (Q.bRenderBound && Spec.Profile == TEXT("cpu"))
 	{
 		Q.Warnings.Add(FString::Printf(
 			TEXT("렌더 스레드(%.3fms)가 게임 스레드(%.3fms)보다 크다. CPU 항목이면 -nullrhi 로 돌린다"),
@@ -305,6 +305,7 @@ void ABenchRunner::WriteResults(const FBenchQuality& Quality)
 	const FString Summary = FString::Printf(
 		TEXT("{\n")
 		TEXT("  \"scenario\": \"%s\",\n")
+		TEXT("  \"profile\": \"%s\",\n")
 		TEXT("  \"param_n\": %d,\n")
 		TEXT("  \"param_extra\": \"%s\",\n")
 		TEXT("  \"repeat_index\": %d,\n")
@@ -323,7 +324,7 @@ void ABenchRunner::WriteResults(const FBenchQuality& Quality)
 		TEXT("  \"gpu_ms\":         { \"median\": %.4f, \"p95\": %.4f, \"min\": %.4f, \"max\": %.4f },\n")
 		TEXT("  \"environment\": %s")
 		TEXT("}\n"),
-		*BenchJson::Escape(Spec.Scenario), Spec.N,
+		*BenchJson::Escape(Spec.Scenario), *BenchJson::Escape(Spec.Profile), Spec.N,
 		*BenchJson::Escape(Scenario->GetParamExtra()), Spec.RepeatIndex,
 		MeasureStartSeconds - StartSeconds, Quality.MeasuredSeconds, Frame.Count,
 		Quality.AverageFps, Quality.HitchCount, Quality.HitchRatio,

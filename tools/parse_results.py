@@ -13,7 +13,7 @@ from pathlib import Path
 
 COLUMNS = [
     "machine_id", "cpu", "gpu", "ram_gb", "os", "engine_version", "build_config",
-    "rhi", "affinity", "core_count", "substrate", "scenario", "param_n", "param_extra",
+    "rhi", "affinity", "core_count", "substrate", "scenario", "profile", "param_n", "param_extra",
     "repeat_index", "warmup_seconds", "measured_seconds", "measured_frames",
     "average_fps", "hitch_ratio", "render_bound", "warnings",
     "frame_ms_median", "frame_ms_p95", "frame_ms_min", "frame_ms_max",
@@ -43,6 +43,7 @@ def flatten(summary: dict) -> dict:
         "core_count": env.get("core_count", ""),
         "substrate": env.get("substrate", ""),
         "scenario": summary.get("scenario", ""),
+        "profile": summary.get("profile", "full"),
         "param_n": summary.get("param_n", ""),
         "param_extra": summary.get("param_extra", ""),
         "repeat_index": summary.get("repeat_index", ""),
