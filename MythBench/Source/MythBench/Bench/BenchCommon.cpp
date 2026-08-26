@@ -1,6 +1,7 @@
 #include "Bench/BenchCommon.h"
 
 #include "HAL/PlatformMisc.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformMemory.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -67,6 +68,7 @@ FBenchEnvironment FBenchEnvironment::Collect(const FBenchRunSpec& Spec)
 {
 	FBenchEnvironment Env;
 	Env.MachineId     = Spec.MachineId;
+	Env.Hostname      = FPlatformProcess::ComputerName();
 	Env.Affinity      = Spec.AffinityNote.IsEmpty() ? TEXT("none") : Spec.AffinityNote;
 	Env.CoreCount     = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
 	Env.Cpu           = FPlatformMisc::GetCPUBrand();
@@ -105,6 +107,7 @@ FString FBenchEnvironment::ToJson() const
 	return FString::Printf(
 		TEXT("{\n")
 		TEXT("  \"machine_id\": \"%s\",\n")
+		TEXT("  \"hostname\": \"%s\",\n")
 		TEXT("  \"cpu\": \"%s\",\n")
 		TEXT("  \"gpu\": \"%s\",\n")
 		TEXT("  \"ram_gb\": %d,\n")
@@ -117,7 +120,8 @@ FString FBenchEnvironment::ToJson() const
 		TEXT("  \"substrate\": %s,\n")
 		TEXT("  \"scalability\": { %s }\n")
 		TEXT("}\n"),
-		*BenchJson::Escape(MachineId), *BenchJson::Escape(Cpu), *BenchJson::Escape(Gpu),
+		*BenchJson::Escape(MachineId), *BenchJson::Escape(Hostname),
+		*BenchJson::Escape(Cpu), *BenchJson::Escape(Gpu),
 		RamGb, CoreCount, *BenchJson::Escape(Affinity),
 		*BenchJson::Escape(Os), *BenchJson::Escape(EngineVersion),
 		*BenchJson::Escape(BuildConfig), *BenchJson::Escape(Rhi),
@@ -155,7 +159,7 @@ FString BenchJson::Escape(const FString& In)
 FString FBenchEnvironment::OneLine() const
 {
 	return FString::Printf(
-		TEXT("machine=%s cpu=%s cores=%d affinity=%s gpu=%s ram=%dGB os=%s engine=%s config=%s rhi=%s substrate=%s"),
-		*MachineId, *Cpu, CoreCount, *Affinity, *Gpu, RamGb, *Os,
+		TEXT("machine=%s host=%s cpu=%s cores=%d affinity=%s gpu=%s ram=%dGB os=%s engine=%s config=%s rhi=%s substrate=%s"),
+		*MachineId, *Hostname, *Cpu, CoreCount, *Affinity, *Gpu, RamGb, *Os,
 		*EngineVersion, *BuildConfig, *Rhi, bSubstrate ? TEXT("on") : TEXT("off"));
 }

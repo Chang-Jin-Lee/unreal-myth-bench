@@ -38,6 +38,13 @@ struct MYTHBENCH_API FBenchRunSpec
 struct MYTHBENCH_API FBenchEnvironment
 {
 	FString MachineId;
+	/**
+	 * 실제로 이 측정을 찍은 머신의 호스트명. MachineId 는 사람이 붙이는
+	 * 이름이고 -machineid 로 넘어오는 평범한 인자이므로, 다른 머신에서
+	 * 남의 이름으로 돌려도 결과 파일만 봐서는 알 수 없다. Hostname 은
+	 * 그 불일치를 사후에 잡을 수 있게 하는 유일한 장치다.
+	 */
+	FString Hostname;
 	FString Cpu;
 	FString Gpu;
 	FString Os;

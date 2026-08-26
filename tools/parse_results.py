@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 COLUMNS = [
-    "machine_id", "cpu", "gpu", "ram_gb", "os", "engine_version", "build_config",
+    "machine_id", "hostname", "cpu", "gpu", "ram_gb", "os", "engine_version", "build_config",
     "rhi", "affinity", "core_count", "substrate", "scenario", "param_n", "param_extra",
     "repeat_index", "warmup_seconds", "measured_seconds", "measured_frames",
     "average_fps", "hitch_ratio", "render_bound", "warnings",
@@ -32,6 +32,7 @@ def flatten(summary: dict) -> dict:
 
     row = {
         "machine_id": env.get("machine_id", ""),
+        "hostname": env.get("hostname", ""),
         "cpu": env.get("cpu", ""),
         "gpu": env.get("gpu", ""),
         "ram_gb": env.get("ram_gb", ""),
@@ -96,6 +97,22 @@ def main() -> int:
             print(f"  - {m or '(빈 machine_id)'}", file=sys.stderr)
         return 1
 
+    # machine_id 는 -machineid 로 넘어오는 평범한 인자다. 다른 머신에서 남의
+    # 이름으로 돌려도 파일만 봐서는 알 수 없다. hostname 은 그 위장을 잡는
+    # 유일한 장치이므로, 한 machine_id 아래 호스트명이 둘 이상이면 실패한다.
+    hosts = {r["hostname"] for r in rows if r["hostname"]}
+    if len(hosts) > 1:
+        machine = next(iter(machines))
+        print(
+            f"machine_id '{machine}' 아래 호스트명이 여러 개다. "
+            f"다른 머신의 결과가 같은 이름으로 섞였다:",
+            file=sys.stderr,
+        )
+        for h in sorted(hosts):
+            n = sum(1 for r in rows if r["hostname"] == h)
+            print(f"  - {h}  ({n}건)", file=sys.stderr)
+        return 1
+
     engines = {r["engine_version"] for r in rows}
     configs = {r["build_config"] for r in rows}
     if len(engines) > 1 or len(configs) > 1:
@@ -111,7 +128,8 @@ def main() -> int:
         writer.writerows(rows)
 
     print(f"{len(rows)}행 → {out}")
-    print(f"머신 {machines.pop()} · 엔진 {engines.pop()} · 구성 {configs.pop()}")
+    host = next(iter(hosts)) if hosts else "(미기록)"
+    print(f"머신 {machines.pop()} (호스트 {host}) · 엔진 {engines.pop()} · 구성 {configs.pop()}")
 
     # 러너가 붙인 경고를 여기서 한 번 더 올린다. 조용히 넘어가면 안 되는 것들이다.
     flagged = [r for r in rows if r.get("warnings")]
