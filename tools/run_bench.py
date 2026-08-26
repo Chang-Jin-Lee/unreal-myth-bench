@@ -32,12 +32,15 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "none"
 
 
-def use_nullrhi(args) -> bool:
-    if args.rhi == "null":
-        return True
-    if args.rhi == "real":
-        return False
-    return args.scenario.lower() in CPU_ONLY
+def use_nullrhi(args, profile: str) -> bool:
+    """cpu 프로파일은 게임 스레드 신호를 분리하고, full 은 실제 프레임을 본다.
+
+    -nullrhi 를 걸면 gpu_ms 와 fps 가 의미를 잃는다. GPU 시간과 프레임레이트를
+    비교하려면 full 프로파일이 필요하다. 그래서 두 벌을 따로 돌린다.
+    """
+    if profile == "cpu":
+        return args.scenario.lower() in CPU_ONLY
+    return False
 
 
 def wrap_affinity(cmd: list[str], mask: str) -> list[str]:
@@ -55,7 +58,7 @@ def wrap_affinity(cmd: list[str], mask: str) -> list[str]:
     return ["cmd", "/c", "start", "/affinity", mask, "/wait", "/b", "", *cmd]
 
 
-def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[str]:
+def build_command(args, n: int, mode: str, repeat: int, out_dir: Path, profile: str) -> list[str]:
     cmd = [
         str(args.engine),
         str(args.project),
@@ -68,6 +71,7 @@ def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[s
         f"-machineid={args.machine_id}",
         f"-out={out_dir}",
         f"-tickgroup={args.tickgroup}",
+        f"-profile={profile}",
         "-fixedseed",
         "-unattended",
         "-nopause",
@@ -77,12 +81,13 @@ def build_command(args, n: int, mode: str, repeat: int, out_dir: Path) -> list[s
         "-resx=1280",
         "-resy=720",
         "-log",
+        f"-abslog={out_dir / 'run.log'}",
     ]
     if mode:
         cmd.append(f"-mode={mode}")
     if args.scenario.lower() not in NO_FIXED_TIMESTEP:
         cmd.append("-benchmark")
-    if use_nullrhi(args):
+    if use_nullrhi(args, profile):
         cmd.append("-nullrhi")
     if args.affinity:
         cmd.append(f"-affinity={args.affinity}")
@@ -116,9 +121,13 @@ def main() -> int:
                              "예: 13900KF 의 P코어 16스레드는 FFFF")
     parser.add_argument("--out", default=str(REPO_ROOT / "results"))
     parser.add_argument("--trace", default="",
-                        help="예: cpu,frame,counters,bookmark. 비우면 trace 끔")
-    parser.add_argument("--rhi", choices=("auto", "null", "real"), default="auto",
-                        help="auto 는 CPU 전용 항목에 -nullrhi 를 붙인다")
+                        help="Insights 채널. 기본은 끔. 측정 스윕에서 cpu 채널을 켜면 "
+                             "액터 1만 개 × 수천 프레임의 이벤트가 쏟아져 계측 오버헤드가 "
+                             "숫자를 오염시킨다. 원인 분석용 trace 는 별도 실행으로 뜬다. "
+                             "예: --repeats 1 --trace cpu,frame,counters,bookmark,gpu")
+    parser.add_argument("--profile", choices=("cpu", "full", "both"), default="both",
+                        help="cpu 는 -nullrhi 로 게임 스레드만, full 은 실제 RHI 로 "
+                             "GPU 시간과 fps 까지. both 는 둘 다 돌려 A/B 로 붙인다")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -131,26 +140,31 @@ def main() -> int:
     modes = [m.strip() for m in args.mode.split(",")] if args.mode else [""]
     date = datetime.date.today().isoformat()
 
-    planned = len(ns) * len(modes) * args.repeats
+    profiles = ["cpu", "full"] if args.profile == "both" else [args.profile]
+    planned = len(ns) * len(modes) * args.repeats * len(profiles)
     est_min = planned * (args.warmup_sec + args.measure_sec + 8.0) / 60.0
     print(f"{args.scenario}: N {len(ns)}종 × mode {len(modes)}종 × 반복 {args.repeats} = {planned}회")
     print(f"  워밍업 {args.warmup_sec}s + 측정 {args.measure_sec}s · "
-          f"nullrhi={use_nullrhi(args)} · affinity={args.affinity or '없음'}")
+          f"프로파일 {'/'.join(profiles)} · affinity={args.affinity or '없음'} · "
+          f"trace={args.trace or '끔'}")
     print(f"  예상 소요 약 {est_min:.0f}분 (엔진 기동 시간 포함)")
 
     failures = 0
-    for n in ns:
+    for profile in profiles:
+      for n in ns:
         for mode in modes:
             for repeat in range(args.repeats):
-                name = f"{slug(args.scenario)}_N{n}_{slug(mode)}_r{repeat}"
+                name = f"{slug(args.scenario)}_{profile}_N{n}_{slug(mode)}_r{repeat}"
                 out_dir = Path(args.out) / args.machine_id / date / name
-                out_dir.mkdir(parents=True, exist_ok=True)
-                cmd = wrap_affinity(build_command(args, n, mode, repeat, out_dir),
-                                    args.affinity)
+                cmd = wrap_affinity(
+                    build_command(args, n, mode, repeat, out_dir, profile), args.affinity)
 
                 if args.dry_run:
+                    # dry-run 은 디렉터리를 만들지 않는다. 빈 폴더가 저장소에 남는다.
                     print(" ".join(cmd))
                     continue
+
+                out_dir.mkdir(parents=True, exist_ok=True)
 
                 print(f"  {name} ...", end="", flush=True)
                 result = subprocess.run(cmd, capture_output=True, text=True)

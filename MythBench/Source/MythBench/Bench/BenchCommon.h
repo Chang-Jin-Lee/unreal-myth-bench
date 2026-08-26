@@ -22,6 +22,7 @@ struct MYTHBENCH_API FBenchRunSpec
 
 	int32   RepeatIndex   = 0;
 	FString MachineId;
+	FString Profile = TEXT("full");   // cpu = -nullrhi, full = 실제 RHI. 기록용
 	FString AffinityNote;         // 런처가 적용한 코어 고정. 기록용
 	FString OutDir;
 

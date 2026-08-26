@@ -299,7 +299,15 @@ python tools/run_bench.py --scenario tickvstimer --machine-id <머신이름> ^
 python tools/parse_results.py results/<머신이름> -o results/<머신이름>/aggregate.csv
 python tools/make_report.py results/<머신이름>/aggregate.csv --metric game_ms_median ^
   --title "M1 Tick vs Timer" --out-md docs/10-synthetic.md --out-svg docs/img/m1-curve.svg
+python tools/compare.py results/<머신이름>/aggregate.csv --n 10000 ^
+  --title "M1 A/B" -o docs/10-synthetic-ab.md
 ```
+
+`--profile both` 가 기본이라 조건마다 두 벌이 돈다. `cpu` 는 `-nullrhi` 로 게임 스레드
+신호를 분리하고, `full` 은 실제 RHI 로 GPU 시간과 fps 를 본다. `compare.py` 가 둘을
+나란히 놓고 중앙값과 P95 의 순위가 뒤집히면 표시한다.
+
+원인 분석용 Insights trace 는 **별도 실행**으로 뜬다. 절차는 프로토콜 5.4 에 있다.
 
 `--affinity` 는 하이브리드 CPU 에서만 필요하다. 마스크 정하는 법은 프로토콜 3.4 에 있다.
 `--rhi auto` 가 기본이라 M1 에는 `-nullrhi` 가 자동으로 붙는다.
