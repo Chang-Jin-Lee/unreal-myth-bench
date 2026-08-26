@@ -20,6 +20,8 @@ from pathlib import Path
 # 절대 편차로 재면 신호가 작을수록 무조건 걸려서 기준이 거꾸로 작동한다.
 SPREAD_WARN = 0.10
 # 순증분이 이보다 작으면 베이스라인 잡음에 묻힌 것으로 본다 (ms).
+# 스윕에서 노이즈 바닥을 잴 수 있으면 그쪽이 이긴다. 이 상수는 대조군이
+# 없거나 반복이 1회뿐이라 바닥을 못 재는 경우의 하한일 뿐이다.
 SIGNAL_FLOOR = 0.02
 
 
@@ -48,8 +50,29 @@ def pick_baseline(conditions, explicit: str) -> str | None:
     return None
 
 
+def noise_floor(buckets, baseline: str | None) -> float:
+    """이 스윕의 측정 하한. 대조군 전체 실행의 산포로 잰다.
+
+    대조군은 N 과 무관하게 액터당 작업이 0 이므로, 그 값들이 흩어지는 폭이
+    곧 이 머신에서 이 조건으로 잴 수 있는 한계다. 그보다 좁은 차이를 요구하는
+    기준은 측정이 나빠서가 아니라 기준이 잴 수 없는 정밀도를 요구해서 걸린다.
+
+    상대 기준만 쓰면 순증분이 작을수록 허용 폭이 무한히 좁아진다. 실제로
+    2026-08-23 스윕에서 순증분 0.393ms(노이즈의 4.7배로 분명한 신호)가
+    허용폭 0.039ms 를 넘겼다는 이유로 걸렸는데, 그 0.086ms 산포는 사실상
+    노이즈 바닥 그 자체였다.
+    """
+    if not baseline:
+        return 0.0
+    values = [v for (cond, _), vals in buckets.items() if cond == baseline for v in vals]
+    if len(values) < 2:
+        return 0.0
+    return max(values) - min(values)
+
+
 def analyse(buckets, baseline: str | None):
     """(조건, N) -> dict(raw, spread, net, count)"""
+    noise = noise_floor(buckets, baseline)
     base = {}
     if baseline:
         for (cond, n), values in buckets.items():
@@ -63,7 +86,7 @@ def analyse(buckets, baseline: str | None):
         net = raw - base.get(n, 0.0) if baseline else raw
         out[(cond, n)] = {
             "raw": raw, "spread": spread, "net": net, "count": len(values),
-            "is_baseline": cond == baseline,
+            "is_baseline": cond == baseline, "noise": noise,
         }
     return out
 
@@ -87,17 +110,32 @@ def slope_per_1k(points: list[tuple[int, float]]):
     return num / den * 1000.0, True
 
 
+def signal_floor(entry) -> float:
+    """이 조합에서 신호로 인정할 최소 순증분.
+
+    노이즈 바닥을 잴 수 있으면 그것이 기준이다. 바닥보다 작은 차이는
+    반복을 더 돌려도 잡음과 구별되지 않는다. SIGNAL_FLOOR 는 대조군이
+    없어 바닥을 못 잰 경우의 대비책이다.
+    """
+    return max(entry.get("noise", 0.0), SIGNAL_FLOOR)
+
+
 def verdict(entry) -> str:
     if entry["is_baseline"]:
         return "대조군"
-    if entry["net"] < SIGNAL_FLOOR:
+    if entry["net"] < signal_floor(entry):
         return "신호 없음"
-    if entry["spread"] / entry["net"] > SPREAD_WARN:
+    # 허용 폭은 상대 기준과 노이즈 바닥 중 넓은 쪽이다. 상대 기준만 쓰면
+    # 신호가 작을수록 이 장비로 도달 불가능한 정밀도를 요구하게 된다.
+    tolerance = max(SPREAD_WARN * entry["net"], entry.get("noise", 0.0))
+    if entry["spread"] > tolerance:
         return "편차 큼"
     return "OK"
 
 
 def markdown(rows, analysis, metric, baseline):
+    noise = next((e["noise"] for e in analysis.values()), 0.0)
+    base_n = sum(e["count"] for k, e in analysis.items() if e["is_baseline"])
     conditions = sorted({k[0] for k in analysis})
     ns = sorted({k[1] for k in analysis})
     first = rows[0]
@@ -146,10 +184,17 @@ def markdown(rows, analysis, metric, baseline):
 
     lines += [
         "",
-        f"괄호는 대조군의 절대값입니다. `·` 는 순증분이 {SIGNAL_FLOOR}ms 미만이라 "
-        f"베이스라인 잡음에 묻힌 구간이고, ⚠ 는 반복 간 편차가 순증분의 "
-        f"{SPREAD_WARN:.0%}를 넘은 조합입니다. 둘 다 그 지점에서는 측정이 성립하지 "
-        f"않았다는 뜻이지 값이 그렇다는 뜻이 아닙니다.",
+        f"괄호는 대조군의 절대값입니다. `·` 는 순증분이 노이즈 바닥보다 작아 "
+        f"베이스라인 잡음에 묻힌 구간이고, ⚠ 는 반복 간 편차가 허용 폭을 넘은 "
+        f"조합입니다. 둘 다 그 지점에서는 측정이 성립하지 않았다는 뜻이지 값이 "
+        f"그렇다는 뜻이 아닙니다.",
+        "",
+        f"허용 폭은 `max(순증분의 {SPREAD_WARN:.0%}, 노이즈 바닥)` 입니다. "
+        f"이 스윕의 노이즈 바닥은 **{noise:.4f} ms** 로, 대조군 {base_n}회 실행의 "
+        f"산포에서 잰 값입니다. 대조군은 N 과 무관하게 액터당 작업이 0 이므로 "
+        f"그 흩어짐이 곧 이 머신의 측정 하한입니다. 상대 기준만 쓰면 신호가 작을수록 "
+        f"이 장비로 도달할 수 없는 정밀도를 요구하게 되어, 분명한 신호까지 "
+        f"측정 실패로 표시됩니다.",
         "",
         f"맨 오른쪽은 신뢰 구간만 써서 원점을 지나는 직선을 맞춘 기울기입니다. "
         f"상수 베이스라인이 소거되므로 절대값보다 이쪽이 안정적입니다. "
@@ -167,7 +212,7 @@ def markdown(rows, analysis, metric, baseline):
 def svg_chart(analysis, metric, width=760, height=430) -> str:
     series = defaultdict(list)
     for (cond, n), entry in analysis.items():
-        if entry["is_baseline"] or entry["net"] < SIGNAL_FLOOR:
+        if entry["is_baseline"] or entry["net"] < signal_floor(entry):
             continue
         series[cond].append((n, entry["net"]))
     for cond in series:
