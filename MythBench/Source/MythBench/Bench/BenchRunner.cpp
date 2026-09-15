@@ -1,6 +1,7 @@
 #include "Bench/BenchRunner.h"
 
 #include "Bench/BenchScenario.h"
+#include "Scenarios/GetAllActorsScenario.h"
 #include "Scenarios/TickVsTimerScenario.h"
 
 #include "DynamicRHI.h"
@@ -28,6 +29,10 @@ namespace
 		if (Key == TEXT("tickvstimer"))
 		{
 			return NewObject<UTickVsTimerScenario>(Outer);
+		}
+		if (Key == TEXT("getallactors"))
+		{
+			return NewObject<UGetAllActorsScenario>(Outer);
 		}
 		return nullptr;
 	}
